@@ -6,6 +6,12 @@
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
+#if defined(WITH_HJ_GAME) && defined(MODE_RESOLVE_OUTLINE_DATA)
+layout(set = 0, binding = 0) uniform sampler2DMS source_depth;
+layout(set = 0, binding = 1) uniform sampler2DMS source_outline;
+layout(rg8, set = 1, binding = 0) uniform restrict writeonly image2D dest_outline;
+#endif
+
 #ifdef MODE_RESOLVE_DEPTH
 layout(set = 0, binding = 0) uniform sampler2DMS source_depth;
 layout(r32f, set = 1, binding = 0) uniform restrict writeonly image2D dest_depth;
@@ -50,7 +56,7 @@ void main() {
 
 #endif
 
-#ifdef MODE_RESOLVE_GI
+#if defined(MODE_RESOLVE_GI) || (defined(WITH_HJ_GAME) && defined(MODE_RESOLVE_OUTLINE_DATA))
 
 	float best_depth = 1e20;
 	vec4 best_normal_roughness = vec4(0.0);
@@ -218,18 +224,25 @@ void main() {
 		}
 	}
 #endif
+#if defined(WITH_HJ_GAME) && defined(MODE_RESOLVE_OUTLINE_DATA)
+	// IDs are categorical. Keep both channels from the same representative sample as normals.
+	imageStore(dest_outline, pos, texelFetch(source_outline, pos, best_index));
+#else
 	best_depth = texelFetch(source_depth, pos, best_index).r;
 	best_normal_roughness = texelFetch(source_normal_roughness, pos, best_index);
 #ifdef VOXEL_GI_RESOLVE
 	best_voxel_gi = texelFetch(source_voxel_gi, pos, best_index).rg;
 #endif
+#endif
 
 #endif
 
+#ifdef MODE_RESOLVE_GI
 	imageStore(dest_depth, pos, vec4(best_depth));
 	imageStore(dest_normal_roughness, pos, vec4(best_normal_roughness));
 #ifdef VOXEL_GI_RESOLVE
 	imageStore(dest_voxel_gi, pos, uvec4(best_voxel_gi, 0, 0));
+#endif
 #endif
 
 #endif

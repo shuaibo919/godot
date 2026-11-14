@@ -64,6 +64,11 @@ void CompositorEffect::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_needs_separate_specular", "enable"), &CompositorEffect::set_needs_separate_specular);
 	ClassDB::bind_method(D_METHOD("get_needs_separate_specular"), &CompositorEffect::get_needs_separate_specular);
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "needs_separate_specular"), "set_needs_separate_specular", "get_needs_separate_specular");
+#ifdef WITH_HJ_GAME
+	ClassDB::bind_method(D_METHOD("set_needs_outline_data", "enable"), &CompositorEffect::set_needs_outline_data);
+	ClassDB::bind_method(D_METHOD("get_needs_outline_data"), &CompositorEffect::get_needs_outline_data);
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "needs_outline_data"), "set_needs_outline_data", "get_needs_outline_data");
+#endif
 
 	BIND_ENUM_CONSTANT(EFFECT_CALLBACK_TYPE_PRE_OPAQUE)
 	BIND_ENUM_CONSTANT(EFFECT_CALLBACK_TYPE_POST_OPAQUE)
@@ -187,6 +192,21 @@ void CompositorEffect::set_needs_separate_specular(bool p_enabled) {
 bool CompositorEffect::get_needs_separate_specular() const {
 	return needs_separate_specular;
 }
+
+#ifdef WITH_HJ_GAME
+void CompositorEffect::set_needs_outline_data(bool p_enabled) {
+	needs_outline_data = p_enabled;
+	if (rid.is_valid()) {
+		RenderingServer *rs = RenderingServer::get_singleton();
+		ERR_FAIL_NULL(rs);
+		rs->compositor_effect_set_flag(rid, RSE::COMPOSITOR_EFFECT_FLAG_NEEDS_OUTLINE_DATA, p_enabled);
+	}
+}
+
+bool CompositorEffect::get_needs_outline_data() const {
+	return needs_outline_data;
+}
+#endif
 
 CompositorEffect::CompositorEffect() {
 	RenderingServer *rs = RenderingServer::get_singleton();

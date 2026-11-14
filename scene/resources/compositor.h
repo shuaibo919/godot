@@ -59,6 +59,9 @@ private:
 	bool needs_motion_vectors = false;
 	bool needs_normal_roughness = false;
 	bool needs_separate_specular = false;
+#ifdef WITH_HJ_GAME
+	bool needs_outline_data = false;
+#endif
 
 protected:
 	static void _bind_methods();
@@ -91,6 +94,10 @@ public:
 
 	void set_needs_separate_specular(bool p_enabled);
 	bool get_needs_separate_specular() const;
+#ifdef WITH_HJ_GAME
+	void set_needs_outline_data(bool p_enabled);
+	bool get_needs_outline_data() const;
+#endif
 
 	CompositorEffect();
 	~CompositorEffect();

@@ -2299,6 +2299,9 @@ void main() {
 	}
 
 	{
+#ifdef WITH_HJ_GAME
+		vec2 outline_data = vec2(0.0);
+#endif
 #CODE : FRAGMENT
 	}
 

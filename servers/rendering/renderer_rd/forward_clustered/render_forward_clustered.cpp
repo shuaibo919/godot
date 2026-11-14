@@ -60,6 +60,20 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular()
 	}
 }
 
+#ifdef WITH_HJ_GAME
+void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_outline_data() {
+	ERR_FAIL_NULL(render_buffers);
+	if (render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_OUTLINE_DATA)) {
+		return;
+	}
+	const bool msaa = render_buffers->get_msaa_3d() != RSE::VIEWPORT_MSAA_DISABLED;
+	render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_OUTLINE_DATA, OUTLINE_DATA_FORMAT, RenderSceneBuffersRD::get_color_usage_bits(msaa, false, render_buffers->get_can_be_storage()));
+	if (msaa) {
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_OUTLINE_DATA_MSAA, OUTLINE_DATA_FORMAT, RenderSceneBuffersRD::get_color_usage_bits(false, true, render_buffers->get_can_be_storage()), render_buffers->get_texture_samples());
+	}
+}
+#endif
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_normal_roughness_texture() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -196,6 +210,17 @@ RID RenderForwardClustered::RenderBufferDataForwardClustered::get_color_pass_fb(
 
 	RID depth = use_msaa ? render_buffers->get_texture(RB_SCOPE_BUFFERS, RB_TEX_DEPTH_MSAA) : render_buffers->get_depth_texture();
 
+#ifdef WITH_HJ_GAME
+	if (p_color_pass_flags & COLOR_PASS_FLAG_OUTLINE_DATA) {
+		ensure_outline_data();
+		RID outline_data = render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, use_msaa ? RB_TEX_OUTLINE_DATA_MSAA : RB_TEX_OUTLINE_DATA);
+		if (render_buffers->has_texture(RB_SCOPE_VRS, RB_TEXTURE)) {
+			RID vrs_texture = render_buffers->get_texture(RB_SCOPE_VRS, RB_TEXTURE);
+			return FramebufferCacheRD::get_singleton()->get_cache_multiview(v_count, color, specular, velocity_buffer, outline_data, depth, vrs_texture);
+		}
+		return FramebufferCacheRD::get_singleton()->get_cache_multiview(v_count, color, specular, velocity_buffer, outline_data, depth);
+	}
+#endif
 	if (render_buffers->has_texture(RB_SCOPE_VRS, RB_TEXTURE)) {
 		RID vrs_texture = render_buffers->get_texture(RB_SCOPE_VRS, RB_TEXTURE);
 		return FramebufferCacheRD::get_singleton()->get_cache_multiview(v_count, color, specular, velocity_buffer, depth, vrs_texture);
@@ -455,6 +480,11 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_MULTIVIEW) != 0) {
 					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MULTIVIEW;
 				}
+#ifdef WITH_HJ_GAME
+				if (p_params->color_pass_flags & COLOR_PASS_FLAG_OUTLINE_DATA) {
+					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_OUTLINE_DATA;
+				}
+#endif
 
 				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
 			} break;
@@ -633,7 +663,12 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 	} break;
 
 		case PASS_MODE_COLOR: {
+#ifdef WITH_HJ_GAME
+			// Outline data only changes the pipeline key, so reuse the existing draw-loop specializations.
+			switch (p_params->color_pass_flags & ~uint32_t(COLOR_PASS_FLAG_OUTLINE_DATA)) {
+#else
 			switch (p_params->color_pass_flags) {
+#endif
 				VALID_FLAG_COMBINATION(0);
 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT);
 				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW);
@@ -1860,6 +1895,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	} else {
 		screen_size = rb->get_internal_size();
 
+#ifdef WITH_HJ_GAME
+		if (_compositor_effects_has_flag(p_render_data, RSE::COMPOSITOR_EFFECT_FLAG_NEEDS_OUTLINE_DATA)) {
+			const bool multiview = p_render_data->scene_data->view_count > 1;
+			color_pass_flags |= COLOR_PASS_FLAG_OUTLINE_DATA;
+			global_pipeline_data_required.use_outline_data = true;
+			global_pipeline_data_required.use_outline_multiview |= multiview;
+			scene_shader.enable_outline_shader_group(true, multiview);
+		}
+#endif
 		if (p_render_data->scene_data->calculate_motion_vectors) {
 			color_pass_flags |= COLOR_PASS_FLAG_MOTION_VECTORS;
 			scene_shader.enable_advanced_shader_group();
@@ -2215,9 +2259,25 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 
 			uint32_t opaque_color_pass_flags = using_motion_pass ? (color_pass_flags & ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS)) : color_pass_flags;
+#ifdef WITH_HJ_GAME
+			RD::DrawFlags color_load_flags = load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL;
+			if (opaque_color_pass_flags & COLOR_PASS_FLAG_OUTLINE_DATA) {
+				// RD clear indices count bound color textures. The shader output always stays at location 3.
+				const uint32_t outline_clear_index = 1 + uint32_t(bool(opaque_color_pass_flags & COLOR_PASS_FLAG_SEPARATE_SPECULAR)) + uint32_t(bool(opaque_color_pass_flags & COLOR_PASS_FLAG_MOTION_VECTORS));
+				if (load_color) {
+					color_load_flags = RD::DrawFlags(RD::DRAW_CLEAR_COLOR_0 << outline_clear_index);
+				}
+				c.resize(4);
+				c.write[outline_clear_index] = Color(0, 0, 0, 0);
+			}
+#endif
 			RID opaque_framebuffer = using_motion_pass ? rb_data->get_color_pass_fb(opaque_color_pass_flags) : color_framebuffer;
 			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+#ifdef WITH_HJ_GAME
+			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, color_load_flags | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region);
+#else
 			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region);
+#endif
 		}
 
 		RD::get_singleton()->draw_command_end_label();
@@ -2250,6 +2310,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	{
+#ifdef WITH_HJ_GAME
+		if ((color_pass_flags & COLOR_PASS_FLAG_OUTLINE_DATA) && use_msaa) {
+			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
+				RID source = rb->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_OUTLINE_DATA_MSAA, v, 0);
+				RID resolved = rb->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_OUTLINE_DATA, v, 0);
+				resolve_effects->resolve_outline_data(rb->get_depth_msaa(v), source, resolved, rb->get_internal_size(), texture_multisamples[msaa]);
+			}
+		}
+#endif
 		if (ce_post_opaque_resolved_color) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
@@ -2416,6 +2485,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		uint32_t transparent_color_pass_flags = (color_pass_flags | uint32_t(COLOR_PASS_FLAG_TRANSPARENT)) & ~uint32_t(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
 		// Motion vectors should not be overwritten by transparent objects.
 		transparent_color_pass_flags &= ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS);
+#ifdef WITH_HJ_GAME
+		transparent_color_pass_flags &= ~uint32_t(COLOR_PASS_FLAG_OUTLINE_DATA);
+#endif
 
 		RID alpha_framebuffer = rb_data.is_valid() ? rb_data->get_color_pass_fb(transparent_color_pass_flags) : color_only_framebuffer;
 		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
@@ -4509,7 +4581,11 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 	ginstance->dirty_list_element.remove_from_list();
 }
 
+#ifdef WITH_HJ_GAME
+static RD::FramebufferFormatID _get_color_framebuffer_format_for_pipeline(RD::DataFormat p_color_format, bool p_can_be_storage, RD::TextureSamples p_samples, bool p_specular, bool p_velocity, uint32_t p_view_count, bool p_outline_data = false) {
+#else
 static RD::FramebufferFormatID _get_color_framebuffer_format_for_pipeline(RD::DataFormat p_color_format, bool p_can_be_storage, RD::TextureSamples p_samples, bool p_specular, bool p_velocity, uint32_t p_view_count) {
+#endif
 	const bool multisampling = p_samples > RD::TEXTURE_SAMPLES_1;
 	RD::AttachmentFormat attachment;
 	attachment.samples = p_samples;
@@ -4542,6 +4618,13 @@ static RD::FramebufferFormatID _get_color_framebuffer_format_for_pipeline(RD::Da
 	}
 
 	// Depth attachment.
+#ifdef WITH_HJ_GAME
+	if (p_outline_data) {
+		attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::OUTLINE_DATA_FORMAT;
+		attachment.usage_flags = RenderSceneBuffersRD::get_color_usage_bits(false, multisampling, p_can_be_storage);
+		attachments.push_back(attachment);
+	}
+#endif
 	attachment.format = RenderSceneBuffersRD::get_depth_format(false, multisampling, p_can_be_storage);
 	attachment.usage_flags = RenderSceneBuffersRD::get_depth_usage_bits(false, multisampling, p_can_be_storage);
 	attachments.push_back(attachment);
@@ -4709,6 +4792,18 @@ void RenderForwardClustered::_mesh_compile_pipelines_for_surface(const SurfacePi
 
 				// View count is assumed to be 2 as the configuration is dependent on the viewport. It's likely a safe assumption for stereo rendering.
 				uint32_t view_count = multiview ? 2 : 1;
+#ifdef WITH_HJ_GAME
+				auto compile_outline_variant = [&](bool p_specular, bool p_motion) {
+					if (alpha || !p_global.use_outline_data || (multiview && !p_global.use_outline_multiview)) {
+						return;
+					}
+					SceneShaderForwardClustered::ShaderData::PipelineKey outline_key = pipeline_key;
+					outline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_OUTLINE_DATA;
+					outline_key.framebuffer_format_id = _get_color_framebuffer_format_for_pipeline(buffers_color_format, buffers_can_be_storage, RD::TextureSamples(p_global.texture_samples), p_specular, p_motion, view_count, true);
+					_mesh_compile_pipeline_for_surface(p_surface.shader, p_surface.mesh_surface, true, p_surface.instanced, p_source, outline_key, r_pipeline_pairs);
+				};
+				compile_outline_variant(false, false);
+#endif
 				pipeline_key.framebuffer_format_id = _get_color_framebuffer_format_for_pipeline(buffers_color_format, buffers_can_be_storage, RD::TextureSamples(p_global.texture_samples), false, false, view_count);
 				_mesh_compile_pipeline_for_surface(p_surface.shader, p_surface.mesh_surface, true, p_surface.instanced, p_source, pipeline_key, r_pipeline_pairs);
 
@@ -4735,6 +4830,9 @@ void RenderForwardClustered::_mesh_compile_pipelines_for_surface(const SurfacePi
 
 						pipeline_key.framebuffer_format_id = _get_color_framebuffer_format_for_pipeline(buffers_color_format, buffers_can_be_storage, RD::TextureSamples(p_global.texture_samples), separate_specular, motion_vectors, view_count);
 						_mesh_compile_pipeline_for_surface(p_surface.shader, p_surface.mesh_surface, true, p_surface.instanced, p_source, pipeline_key, r_pipeline_pairs);
+#ifdef WITH_HJ_GAME
+						compile_outline_variant(separate_specular, motion_vectors);
+#endif
 					}
 				}
 			}

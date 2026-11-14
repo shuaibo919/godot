@@ -1065,6 +1065,10 @@ layout(location = 1) out vec4 specular_buffer; //specular and SSS (subsurface sc
 layout(location = 0) out vec4 frag_color;
 #endif // MODE_SEPARATE_SPECULAR
 
+#if defined(WITH_HJ_GAME) && defined(MODE_OUTLINE_DATA)
+layout(location = 3) out vec2 outline_data_buffer;
+#endif
+
 #endif // RENDER DEPTH
 
 #ifdef MOTION_VECTORS
@@ -1203,6 +1207,9 @@ vec3 encode24(vec3 v) {
 #endif // MODE_RENDER_NORMAL_ROUGHNESS
 
 void fragment_shader(in SceneData scene_data) {
+#ifdef WITH_HJ_GAME
+	vec2 outline_data = vec2(0.0);
+#endif
 	uint instance_index = instance_index_interp;
 
 #ifdef PREMUL_ALPHA_USED
@@ -3101,6 +3108,9 @@ void fragment_shader(in SceneData scene_data) {
 
 #endif //MODE_SEPARATE_SPECULAR
 
+#if defined(WITH_HJ_GAME) && defined(MODE_OUTLINE_DATA)
+	outline_data_buffer = outline_data;
+#endif
 #endif //MODE_RENDER_DEPTH
 #ifdef MOTION_VECTORS
 	vec2 position_clip = (screen_position.xy / screen_position.w) - scene_data.taa_jitter;

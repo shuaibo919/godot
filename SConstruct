@@ -166,6 +166,7 @@ opts.Add(
 )
 opts.Add(EnumVariable("arch", "CPU architecture", "auto", ["auto"] + architectures, architecture_aliases, ignorecase=2))
 opts.Add(BoolVariable("dev_build", "Developer build with dev-only debugging code (DEV_ENABLED)", False))
+opts.Add(BoolVariable("with_hj_game", "Enable TheOne rendering extensions (WITH_HJ_GAME)", False))
 opts.Add(
     EnumVariable(
         "optimize",
@@ -532,6 +533,8 @@ env.platform_apis = platform_apis
 
 env.editor_build = env["target"] == "editor"
 env.dev_build = env["dev_build"]
+if env["with_hj_game"]:
+    env.Append(CPPDEFINES=["WITH_HJ_GAME"])
 env.debug_features = env["target"] in ["editor", "template_debug"]
 
 if env["optimize"] == "auto":

@@ -48,6 +48,12 @@ public:
 		SHADER_GROUP_ADVANCED,
 		SHADER_GROUP_MULTIVIEW,
 		SHADER_GROUP_ADVANCED_MULTIVIEW,
+#ifdef WITH_HJ_GAME
+		SHADER_GROUP_OUTLINE,
+		SHADER_GROUP_OUTLINE_ADVANCED,
+		SHADER_GROUP_OUTLINE_MULTIVIEW,
+		SHADER_GROUP_OUTLINE_ADVANCED_MULTIVIEW,
+#endif
 	};
 
 	// Not an enum because these values are constants that are processed as numbers
@@ -71,7 +77,12 @@ public:
 		SHADER_COLOR_PASS_FLAG_LIGHTMAP = 1 << 2,
 		SHADER_COLOR_PASS_FLAG_MULTIVIEW = 1 << 3,
 		SHADER_COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 4,
+#ifdef WITH_HJ_GAME
+		SHADER_COLOR_PASS_FLAG_OUTLINE_DATA = 1 << 5,
+		SHADER_COLOR_PASS_FLAG_COUNT = 1 << 6
+#else
 		SHADER_COLOR_PASS_FLAG_COUNT = 1 << 5
+#endif
 	};
 
 	enum PipelineVersion {
@@ -94,7 +105,12 @@ public:
 		PIPELINE_COLOR_PASS_FLAG_LIGHTMAP = 1 << 2,
 		PIPELINE_COLOR_PASS_FLAG_MULTIVIEW = 1 << 3,
 		PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 4,
+#ifdef WITH_HJ_GAME
+		PIPELINE_COLOR_PASS_FLAG_OUTLINE_DATA = 1 << 5,
+		PIPELINE_COLOR_PASS_FLAG_OPTIONS = 6,
+#else
 		PIPELINE_COLOR_PASS_FLAG_OPTIONS = 5,
+#endif
 		PIPELINE_COLOR_PASS_FLAG_COMBINATIONS = 1 << PIPELINE_COLOR_PASS_FLAG_OPTIONS,
 	};
 
@@ -379,6 +395,9 @@ public:
 	void init(const String p_defines);
 	void set_default_specialization(const ShaderSpecialization &p_specialization);
 	void enable_multiview_shader_group();
+#ifdef WITH_HJ_GAME
+	void enable_outline_shader_group(bool p_advanced, bool p_multiview);
+#endif
 	void enable_advanced_shader_group(bool p_needs_multiview = false);
 	bool is_multiview_shader_group_enabled() const;
 	bool is_advanced_shader_group_enabled(bool p_multiview) const;

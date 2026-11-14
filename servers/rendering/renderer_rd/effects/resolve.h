@@ -50,6 +50,9 @@ private:
 		RESOLVE_MODE_GI,
 		RESOLVE_MODE_GI_VOXEL_GI,
 		RESOLVE_MODE_DEPTH,
+#ifdef WITH_HJ_GAME
+		RESOLVE_MODE_OUTLINE_DATA,
+#endif
 		RESOLVE_MODE_MAX
 	};
 
@@ -73,6 +76,9 @@ public:
 
 	void resolve_gi(RID p_source_depth, RID p_source_normal_roughness, RID p_source_voxel_gi, RID p_dest_depth, RID p_dest_normal_roughness, RID p_dest_voxel_gi, Vector2i p_screen_size, int p_samples);
 	void resolve_depth(RID p_source_depth, RID p_dest_depth, Vector2i p_screen_size, int p_samples);
+#ifdef WITH_HJ_GAME
+	void resolve_outline_data(RID p_source_depth, RID p_source_outline, RID p_dest_outline, Vector2i p_screen_size, int p_samples);
+#endif
 	void resolve_depth_raster(RID p_source_rd_texture, RID p_dest_framebuffer, int p_samples);
 };
 

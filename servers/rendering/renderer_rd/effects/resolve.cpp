@@ -50,6 +50,9 @@ Resolve::Resolve(bool p_prefer_raster_effects) {
 		resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n");
 		resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n#define VOXEL_GI_RESOLVE\n");
 		resolve_modes.push_back("\n#define MODE_RESOLVE_DEPTH\n");
+#ifdef WITH_HJ_GAME
+		resolve_modes.push_back("\n#define WITH_HJ_GAME\n#define MODE_RESOLVE_OUTLINE_DATA\n");
+#endif
 
 		resolve.shader.initialize(resolve_modes);
 
@@ -147,6 +150,31 @@ void Resolve::resolve_depth(RID p_source_depth, RID p_dest_depth, Vector2i p_scr
 
 	RD::get_singleton()->compute_list_end();
 }
+
+#ifdef WITH_HJ_GAME
+void Resolve::resolve_outline_data(RID p_source_depth, RID p_source_outline, RID p_dest_outline, Vector2i p_screen_size, int p_samples) {
+	ERR_FAIL_COND(prefer_raster_effects);
+	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(cache);
+	MaterialStorage *materials = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(materials);
+
+	RID sampler = materials->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RD::Uniform depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, p_source_depth }));
+	RD::Uniform outline(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ sampler, p_source_outline }));
+	RD::Uniform dest(RD::UNIFORM_TYPE_IMAGE, 0, p_dest_outline);
+	RID shader = resolve.shader.version_get_shader(resolve.shader_version, RESOLVE_MODE_OUTLINE_DATA);
+	ERR_FAIL_COND(shader.is_null());
+	ResolvePushConstant params = { { p_screen_size.x, p_screen_size.y }, p_samples, 0 };
+	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(list, resolve.pipelines[RESOLVE_MODE_OUTLINE_DATA]);
+	RD::get_singleton()->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, depth, outline), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(list, cache->get_cache(shader, 1, dest), 1);
+	RD::get_singleton()->compute_list_set_push_constant(list, &params, sizeof(params));
+	RD::get_singleton()->compute_list_dispatch_threads(list, p_screen_size.x, p_screen_size.y, 1);
+	RD::get_singleton()->compute_list_end();
+}
+#endif
 
 void Resolve::resolve_depth_raster(RID p_source_rd_texture, RID p_dest_framebuffer, int p_samples) {
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();

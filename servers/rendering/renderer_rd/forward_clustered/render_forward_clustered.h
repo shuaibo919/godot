@@ -54,6 +54,10 @@
 #define RB_TEX_NORMAL_ROUGHNESS_MSAA SNAME("normal_roughness_msaa")
 #define RB_TEX_VOXEL_GI SNAME("voxel_gi")
 #define RB_TEX_VOXEL_GI_MSAA SNAME("voxel_gi_msaa")
+#ifdef WITH_HJ_GAME
+#define RB_TEX_OUTLINE_DATA SNAME("outline_data")
+#define RB_TEX_OUTLINE_DATA_MSAA SNAME("outline_data_msaa")
+#endif
 
 namespace RendererSceneRenderImplementation {
 
@@ -124,6 +128,10 @@ public:
 		RID render_sdfgi_uniform_set;
 
 		void ensure_specular();
+#ifdef WITH_HJ_GAME
+		void ensure_outline_data();
+		static constexpr RD::DataFormat OUTLINE_DATA_FORMAT = RD::DATA_FORMAT_R8G8_UNORM;
+#endif
 		bool has_specular() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR); }
 		RID get_specular() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR); }
 		RID get_specular(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR, p_layer, 0); }
@@ -214,6 +222,9 @@ private:
 		COLOR_PASS_FLAG_SEPARATE_SPECULAR = 1 << 1,
 		COLOR_PASS_FLAG_MULTIVIEW = 1 << 2,
 		COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 3,
+#ifdef WITH_HJ_GAME
+		COLOR_PASS_FLAG_OUTLINE_DATA = 1 << 4,
+#endif
 	};
 
 	struct GeometryInstanceSurfaceDataCache;
@@ -649,6 +660,10 @@ private:
 				uint32_t use_32_bit_shadows : 1;
 				uint32_t use_shadow_cubemaps : 1;
 				uint32_t use_shadow_dual_paraboloid : 1;
+#ifdef WITH_HJ_GAME
+				uint32_t use_outline_data : 1;
+				uint32_t use_outline_multiview : 1;
+#endif
 			};
 		};
 	};

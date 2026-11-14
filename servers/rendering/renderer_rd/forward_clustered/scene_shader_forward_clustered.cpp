@@ -315,6 +315,11 @@ uint16_t SceneShaderForwardClustered::ShaderData::_get_shader_version(PipelineVe
 			if (p_color_pass_flags & PIPELINE_COLOR_PASS_FLAG_MULTIVIEW) {
 				shader_flags |= SHADER_COLOR_PASS_FLAG_MULTIVIEW;
 			}
+#ifdef WITH_HJ_GAME
+			if (p_color_pass_flags & PIPELINE_COLOR_PASS_FLAG_OUTLINE_DATA) {
+				shader_flags |= SHADER_COLOR_PASS_FLAG_OUTLINE_DATA;
+			}
+#endif
 
 			return ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + shader_flags;
 		} break;
@@ -445,6 +450,11 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 			}
 		} else {
 			blend_state = blend_state_color_opaque;
+#ifdef WITH_HJ_GAME
+			if (p_pipeline_key.color_pass_flags & PIPELINE_COLOR_PASS_FLAG_OUTLINE_DATA) {
+				blend_state.attachments.push_back(RD::PipelineColorBlendState::Attachment());
+			}
+#endif
 
 			if (depth_pre_pass_enabled) {
 				// We already have a depth from the depth pre-pass, there is no need to write it again.
@@ -659,6 +669,9 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 			"\n#define USE_LIGHTMAP\n", // SHADER_COLOR_PASS_FLAG_LIGHTMAP
 			"\n#define USE_MULTIVIEW\n", // SHADER_COLOR_PASS_FLAG_MULTIVIEW
 			"\n#define MOTION_VECTORS\n", // SHADER_COLOR_PASS_FLAG_MOTION_VECTORS
+#ifdef WITH_HJ_GAME
+			"\n#define MODE_OUTLINE_DATA\n", // SHADER_COLOR_PASS_FLAG_OUTLINE_DATA
+#endif
 		};
 
 		for (int i = 0; i < SHADER_COLOR_PASS_FLAG_COUNT; i++) {
@@ -680,13 +693,23 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 			} else if (multiview_group) {
 				group = SHADER_GROUP_MULTIVIEW;
 			}
+#ifdef WITH_HJ_GAME
+			if (i & SHADER_COLOR_PASS_FLAG_OUTLINE_DATA) {
+				group = advanced_group ? (multiview_group ? SHADER_GROUP_OUTLINE_ADVANCED_MULTIVIEW : SHADER_GROUP_OUTLINE_ADVANCED)
+									   : (multiview_group ? SHADER_GROUP_OUTLINE_MULTIVIEW : SHADER_GROUP_OUTLINE);
+			}
+#endif
 
 			shader_versions.push_back(ShaderRD::VariantDefine(group, version, false));
 		}
 
 		Vector<uint64_t> dynamic_buffers;
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardClustered::RENDER_PASS_UNIFORM_SET, 2));
+#ifdef WITH_HJ_GAME
+		shader.initialize(shader_versions, p_defines + "\n#define WITH_HJ_GAME\n", Vector<RD::PipelineImmutableSampler>(), dynamic_buffers);
+#else
 		shader.initialize(shader_versions, p_defines, Vector<RD::PipelineImmutableSampler>(), dynamic_buffers);
+#endif
 
 		if (RendererCompositorRD::get_singleton()->is_xr_enabled()) {
 			shader.enable_group(SHADER_GROUP_MULTIVIEW);
@@ -751,6 +774,9 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.renames["METALLIC"] = "metallic_highp";
 		actions.renames["SPECULAR"] = "specular";
 		actions.renames["ROUGHNESS"] = "roughness_highp";
+#ifdef WITH_HJ_GAME
+		actions.renames["OUTLINE_DATA"] = "outline_data";
+#endif
 		actions.renames["RIM"] = "rim";
 		actions.renames["RIM_TINT"] = "rim_tint";
 		actions.renames["CLEARCOAT"] = "clearcoat";
@@ -1020,6 +1046,21 @@ void SceneShaderForwardClustered::set_default_specialization(const ShaderSpecial
 void SceneShaderForwardClustered::enable_multiview_shader_group() {
 	shader.enable_group(SHADER_GROUP_MULTIVIEW);
 }
+
+#ifdef WITH_HJ_GAME
+void SceneShaderForwardClustered::enable_outline_shader_group(bool p_advanced, bool p_multiview) {
+	shader.enable_group(SHADER_GROUP_OUTLINE);
+	if (p_advanced) {
+		shader.enable_group(SHADER_GROUP_OUTLINE_ADVANCED);
+	}
+	if (p_multiview) {
+		shader.enable_group(SHADER_GROUP_OUTLINE_MULTIVIEW);
+		if (p_advanced) {
+			shader.enable_group(SHADER_GROUP_OUTLINE_ADVANCED_MULTIVIEW);
+		}
+	}
+}
+#endif
 
 void SceneShaderForwardClustered::enable_advanced_shader_group(bool p_needs_multiview) {
 	if (p_needs_multiview || RendererCompositorRD::get_singleton()->is_xr_enabled()) {

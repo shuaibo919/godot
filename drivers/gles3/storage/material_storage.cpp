@@ -1308,6 +1308,9 @@ MaterialStorage::MaterialStorage() {
 		actions.renames["METALLIC"] = "metallic";
 		actions.renames["SPECULAR"] = "specular";
 		actions.renames["ROUGHNESS"] = "roughness";
+#ifdef WITH_HJ_GAME
+		actions.renames["OUTLINE_DATA"] = "outline_data";
+#endif
 		actions.renames["RIM"] = "rim";
 		actions.renames["RIM_TINT"] = "rim_tint";
 		actions.renames["CLEARCOAT"] = "clearcoat";

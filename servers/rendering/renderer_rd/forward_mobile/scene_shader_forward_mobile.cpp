@@ -620,7 +620,11 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		Vector<uint64_t> dynamic_buffers;
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardMobile::RENDER_PASS_UNIFORM_SET, 0));
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardMobile::RENDER_PASS_UNIFORM_SET, 1));
+#ifdef WITH_HJ_GAME
+		shader.initialize(shader_versions, p_defines + "\n#define WITH_HJ_GAME\n", immutable_samplers, dynamic_buffers);
+#else
 		shader.initialize(shader_versions, p_defines, immutable_samplers, dynamic_buffers);
+#endif
 
 		if (RendererCompositorRD::get_singleton()->is_xr_enabled()) {
 			enable_multiview_shader_group();
@@ -685,6 +689,9 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		actions.renames["METALLIC"] = "metallic_highp";
 		actions.renames["SPECULAR"] = "specular_highp";
 		actions.renames["ROUGHNESS"] = "roughness_highp";
+#ifdef WITH_HJ_GAME
+		actions.renames["OUTLINE_DATA"] = "outline_data";
+#endif
 		actions.renames["RIM"] = "rim_highp";
 		actions.renames["RIM_TINT"] = "rim_tint_highp";
 		actions.renames["CLEARCOAT"] = "clearcoat_highp";
