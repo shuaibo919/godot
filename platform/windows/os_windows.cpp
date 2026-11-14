@@ -2579,7 +2579,13 @@ Error OS_Windows::move_to_trash(const String &p_path) {
 
 String OS_Windows::get_system_ca_certificates() {
 	HCERTSTORE cert_store = CertOpenSystemStoreA(0, "ROOT");
-	ERR_FAIL_NULL_V_MSG(cert_store, "", "Failed to read the root certificate store.");
+	if (cert_store == nullptr) {
+		// Some restricted/non-interactive Windows sessions cannot open the ROOT
+		// store. This is not fatal: CryptoMbedTLS falls back to the built-in
+		// certificate bundle when no system certificates are returned.
+		print_verbose("System root certificate store unavailable; using built-in CA certificates.");
+		return String();
+	}
 
 	FILETIME curr_time;
 	GetSystemTimeAsFileTime(&curr_time);
